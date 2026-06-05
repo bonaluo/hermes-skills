@@ -47,7 +47,19 @@ python3 ~/.hermes/skills/hermes-model-switch/scripts/hermes-switch-helper.py mod
 /model <model> --provider <provider>
 ```
 
-**单独一条消息发送，纯文本无任何格式**（无反引号、无代码块、无 markdown），方便复制。Agent 不替用户发 `/model` — slash command 需用户手动触发。
+**单独一条消息发送，纯文本无任何格式**（无反引号、无代码块、无 markdown），方便复制。
+
+### 沟通规范
+
+- **回复简洁**：只发编号 + 名称，不要表格 / 备注 / 未配 key 列表
+- **第 3 步命令**：单独一条消息，纯文本无格式（不包裹反引号/代码块）
+- **不要自作主张**：每步等用户回复，不跳步
+
+### 关键约束
+
+- "切换模型" = **会话中临时切换**，不写 `config.yaml`（不带 `--global`）
+- 用 Hermes 自带的 `/model` slash 命令，不是改 `config.yaml`
+- Agent **不替用户发 `/model`** — slash command 是 user-side 触发的，只能用户发
 
 ---
 
