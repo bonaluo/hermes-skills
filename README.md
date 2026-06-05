@@ -4,4 +4,6 @@
 
 ## 技能列表
 
-- hermes-model-switch — Hermes Agent 模型/Provider 切换技能
+所有技能位于 `skills/` 目录下。
+
+- `skills/hermes-model-switch/` — Hermes Agent 模型/Provider 切换技能
