@@ -1,7 +1,7 @@
 ---
 name: hermes-model-switch
 description: "Hermes Agent 模型/Provider 切换 — 三步交互式引导 + 辅助脚本(列出已配 key 的 provider / 拉取可用 model list)"
-version: 20260605.2050
+version: 20260605.2236
 author: bonaluo
 tags: [hermes, model-switch, provider, switch-model]
 ---
