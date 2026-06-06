@@ -11,6 +11,14 @@ hermes-switch-helper.py — Hermes 会话内切换模型的辅助脚本
         调 <base_url>/models 拉取该 provider 的实时 model 列表。
         live fetch 失败时回退 ~/.hermes/provider_models_cache.json。
 
+    hermes-switch-helper.py cache read [<keyword>]
+        从 SKILL.md 同级 config/cache.json 读取快捷切换缓存。
+        keyword 可选,匹配 model 或 provider 名称。
+
+    hermes-switch-helper.py cache write <provider> <model>
+        写入一条快捷切换记录到 config/cache.json。
+        同 provider+model 已存在则 count+1 并更新 lastUsed。
+
 依赖: PyYAML (hermes-agent venv 自带)。其余用 stdlib。
 """
 from __future__ import annotations
@@ -18,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -201,7 +210,7 @@ def cmd_providers() -> int:
 # ---------------------------------------------------------------------------
 
 def _resolve_custom(cfg: dict) -> tuple[str | None, str | None]:
-    """custom 类型的 (base_url, api_key),取 config.yaml.custom_providers[0]。"""
+    """custom 类型的 (base_url, api_key),取 config.yaml.custom_providers[0]."""
     for cp in (cfg.get("custom_providers") or []):
         if (cp.get("base_url") or "").strip():
             return (cp["base_url"].rstrip("/"), cp.get("api_key") or "")
@@ -283,6 +292,78 @@ def cmd_models(provider: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# 子命令 3: cache — 读取/写入快捷切换缓存
+# ---------------------------------------------------------------------------
+
+def _cache_path() -> Path:
+    """SKILL.md 同级 config/cache.json"""
+    script_dir = Path(__file__).resolve().parent  # scripts/
+    return script_dir.parent / "config" / "cache.json"
+
+
+def cmd_cache(action: str, *extra: str) -> int:
+    """cache read [<keyword>]  |  cache write <provider> <model>"""
+    path = _cache_path()
+
+    if action == "read":
+        if not path.exists():
+            return 0
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return 0
+        keyword = extra[0].lower() if extra else ""
+        # 按 lastUsed 降序排列
+        models = sorted(
+            data.get("models", []),
+            key=lambda x: x.get("lastUsed", 0),
+            reverse=True,
+        )
+        for m in models:
+            if keyword:
+                if keyword not in m.get("model", "").lower() and keyword not in m.get("provider", "").lower():
+                    continue
+            print(json.dumps(m))
+        return 0
+
+    if action == "write":
+        if len(extra) < 2:
+            print("Usage: hermes-switch-helper.py cache write <provider> <model>", file=sys.stderr)
+            return 2
+        provider, model = extra[0], extra[1]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data: dict = {}
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                data = {}
+        models: list[dict] = data.get("models", [])
+        now_ts = int(time.time())
+        found = False
+        for m in models:
+            if m.get("provider") == provider and m.get("model") == model:
+                m["count"] = m.get("count", 0) + 1
+                m["lastUsed"] = now_ts
+                found = True
+                break
+        if not found:
+            models.append({
+                "provider": provider,
+                "model": model,
+                "count": 1,
+                "lastUsed": now_ts,
+            })
+        models.sort(key=lambda x: x.get("lastUsed", 0), reverse=True)
+        data["models"] = models
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        return 0
+
+    print(f"Unknown cache action: {action}\nUsage: cache read|write ...", file=sys.stderr)
+    return 2
+
+
+# ---------------------------------------------------------------------------
 # 入口
 # ---------------------------------------------------------------------------
 
@@ -298,6 +379,11 @@ def main(argv: list[str]) -> int:
             print("Usage: hermes-switch-helper.py models <provider>", file=sys.stderr)
             return 2
         return cmd_models(argv[2])
+    if cmd == "cache":
+        if len(argv) < 3:
+            print("Usage: hermes-switch-helper.py cache read|write ...", file=sys.stderr)
+            return 2
+        return cmd_cache(argv[2], *argv[3:])
     print(f"Unknown command: {cmd}\n{__doc__}", file=sys.stderr)
     return 2
 

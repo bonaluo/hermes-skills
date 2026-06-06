@@ -1,15 +1,55 @@
 ---
 name: hermes-model-switch
-description: Interactive 3-step model switching for Hermes Agent + helper script to list keyed providers and fetch available models / Hermes Agent 三步交互式模型切换引导 + 辅助脚本(列出已配 key 的 provider / 拉取可用 model list)
+description: Interactive 3-step model switching for Hermes Agent + helper script to list keyed providers and fetch available models. Supports quick-switch via config/cache.json / Hermes Agent 三步交互式模型切换引导 + 辅助脚本(列出已配 key 的 provider / 拉取可用 model list)。支持通过 config/cache.json 快捷切换
 tags: [hermes, model-switch, provider, switch-model]
 metadata:
-  version: 20260605.2236
+  version: 20260607.1600
   update-url: https://github.com/bonaluo/hermes-skills@hermes-model-switch
 ---
 
 # Hermes Agent 模型/Provider 切换
 
-三步交互式引导流程，配合辅助脚本在会话内临时切换模型。
+三步交互式引导流程，配合辅助脚本在会话内临时切换模型。支持快捷切换：用户说"切换 xxx 模型"时自动从缓存中匹配。
+
+## 快捷切换（优先）
+
+当用户说"切换 xxx 模型"（如"切换 flash 模型"、"切换到 deepseek"）时，**优先使用快捷切换流程**，不需要走完整三步流程。
+
+### 快捷切换流程
+
+1. 从缓存中查找：`python3 scripts/hermes-switch-helper.py cache read <keyword>`
+   - keyword 取用户提到的模型关键词（如 "flash", "deepseek", "pro", "mini"）
+2. 如果缓存命中（匹配到 provider + model），直接拼接 `/model` 命令发给用户
+3. 如果缓存未命中，回退到三步交互流程
+
+### 快捷切换完成后
+
+成功切换后，调用 `cache write` 更新缓存：
+
+```bash
+python3 scripts/hermes-switch-helper.py cache write <provider> <model>
+```
+
+### 缓存文件格式
+
+`config/cache.json`（与 SKILL.md 同级）：
+
+```json
+{
+    "models": [
+        {
+            "provider": "nvidia",
+            "model": "deepseek-ai/deepseek-v4-flash",
+            "count": 3,
+            "lastUsed": 1780779946
+        }
+    ]
+}
+```
+
+按 `lastUsed` 降序排列，最近使用的排在最前。`count` 记录切换次数。
+
+---
 
 ## 交互式引导（三步流程）
 
@@ -45,6 +85,12 @@ python3 scripts/hermes-switch-helper.py models <provider_name>
 
 **单独一条消息发送，纯文本无任何格式**（无反引号、无代码块、无 markdown），方便复制。
 
+切换完成后，更新快捷缓存：
+
+```bash
+python3 scripts/hermes-switch-helper.py cache write <provider> <model>
+```
+
 ### 沟通规范
 
 - **回复简洁**：只发编号 + 名称，不要表格 / 备注 / 未配 key 列表
@@ -61,7 +107,7 @@ python3 scripts/hermes-switch-helper.py models <provider_name>
 
 ## 辅助脚本 `hermes-switch-helper.py`
 
-放在 `scripts/` 下，两个子命令：
+放在 `scripts/` 下，三个子命令：
 
 ### `providers`
 
@@ -72,3 +118,11 @@ python3 scripts/hermes-switch-helper.py models <provider_name>
 读取对应 Provider 的 Key，调用 `<base_url>/models` GET 端点获取实时 Model 列表。live fetch 失败时回退 `~/.hermes/provider_models_cache.json` 缓存。
 
 内置 Provider 映射包括：nvidia、lm-studio、openai、anthropic、minimax、minimax-cn、openrouter、kimi-coding、zai、custom 等。
+
+### `cache read [<keyword>]`
+
+从同级的 `config/cache.json` 读取快捷切换缓存。keyword 可选，匹配 model 或 provider 名称。按 `lastUsed` 降序输出 JSON 行。
+
+### `cache write <provider> <model>`
+
+写入一条快捷切换记录。同 provider+model 已存在则 count+1 并更新 lastUsed。
