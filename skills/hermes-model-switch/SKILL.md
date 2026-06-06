@@ -77,7 +77,13 @@ python3 scripts/hermes-switch-helper.py models <provider_name>
 
 ### 步骤 3：用户选 Model 后，生成 `/model` 命令
 
-按用户选的 `<provider>` + `<model>` 拼接：
+按用户选的 `<provider>` + `<model>` 拼接命令，并**同时**执行 `cache write` 写入缓存：
+
+```bash
+python3 scripts/hermes-switch-helper.py cache write <provider> <model>
+```
+
+然后单独一条消息发送 `/model` 命令：
 
 ```
 /model <model> --provider <provider>
@@ -85,11 +91,7 @@ python3 scripts/hermes-switch-helper.py models <provider_name>
 
 **单独一条消息发送，纯文本无任何格式**（无反引号、无代码块、无 markdown），方便复制。
 
-切换完成后，更新快捷缓存：
-
-```bash
-python3 scripts/hermes-switch-helper.py cache write <provider> <model>
-```
+> 重要：`cache write` 必须在发 `/model` 命令前执行，确保无论用户是否实际执行切换，provider+model 组合都被记录到缓存中。
 
 ### 沟通规范
 
