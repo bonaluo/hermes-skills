@@ -3,7 +3,7 @@ name: hermes-model-switch
 description: Interactive 3-step model switching for Hermes Agent + helper script to list keyed providers and fetch available models. Supports quick-switch via config/cache.json / Hermes Agent 三步交互式模型切换引导 + 辅助脚本(列出已配 key 的 provider / 拉取可用 model list)。支持通过 config/cache.json 快捷切换
 tags: [hermes, model-switch, provider, switch-model]
 metadata:
-  version: 20260607.0727
+  version: 20260607.0741
   update-url: https://github.com/bonaluo/hermes-skills@hermes-model-switch
 ---
 
@@ -11,9 +11,33 @@ metadata:
 
 三步交互式引导流程，配合辅助脚本在会话内临时切换模型。支持快捷切换：用户说"切换 xxx 模型"时自动从缓存中匹配。
 
-## 快捷切换（优先）
+## 触发判断（先于一切）
 
-当用户说"切换 xxx 模型"（如"切换 flash 模型"、"切换到 deepseek"）时，**优先使用快捷切换流程**，不需要走完整三步流程。
+收到"切换"相关请求时，**先判断走哪个流程**：
+
+### 走快捷切换 — 用户明确说了模型关键词
+
+关键词夹在"切换"和"模型"之间，或"切换到 xxx"等变体：
+
+- ✅ "切换 deepseek-v4-flash 模型"
+- ✅ "切换到 flash"
+- ✅ "换 pro 模型"
+- ✅ "切 deepseek"
+
+### 走三步流程 — 无具体模型关键词
+
+用户只说"切换模型"而未指定哪个模型：
+
+- ❌ "切换模型" → 三步流程
+- ❌ "切换其它模型" → 三步流程
+- ❌ "换个模型" → 三步流程
+- ❌ "切换其他模型" → 三步流程
+
+**没有关键词 = 不走快捷切换 = 必须走三步交互流程。**
+
+---
+
+## 快捷切换（仅有关键词时）
 
 ### 快捷切换流程
 
