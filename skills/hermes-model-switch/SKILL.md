@@ -3,7 +3,7 @@ name: hermes-model-switch
 description: Interactive 3-step model switching for Hermes Agent + helper script to list keyed providers and fetch available models. Supports quick-switch via config/cache.json / Hermes Agent 三步交互式模型切换引导 + 辅助脚本(列出已配 key 的 provider / 拉取可用 model list)。支持通过 config/cache.json 快捷切换
 tags: [hermes, model-switch, provider, switch-model]
 metadata:
-  version: 20260607.1533
+  version: 20260607.1538
   update-url: https://github.com/bonaluo/hermes-skills@hermes-model-switch
 ---
 
@@ -120,7 +120,6 @@ python3 scripts/hermes-switch-helper.py cache write <provider> <model>
 ### 沟通规范
 
 - **回复简洁**：只发编号 + 名称，不要表格 / 备注 / 未配 key 列表
-- **第 2 步模型列表**：直接返回工具原始输出，不经过 LLM 二次处理（避免 token 浪费 + 转述误差）
 - **第 3 步命令**：单独一条消息，纯文本无格式（不包裹反引号/代码块）
 - **不要自作主张**：每步等用户回复，不跳步
 
