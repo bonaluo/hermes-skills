@@ -3,7 +3,7 @@ name: hermes-model-switch
 description: Interactive 3-step model switching for Hermes Agent + helper script to list keyed providers and fetch available models. Supports quick-switch via config/cache.json / Hermes Agent 三步交互式模型切换引导 + 辅助脚本(列出已配 key 的 provider / 拉取可用 model list)。支持通过 config/cache.json 快捷切换
 tags: [hermes, model-switch, provider, switch-model]
 metadata:
-  version: 20260607.0741
+  version: 20260607.1554
   update-url: https://github.com/bonaluo/hermes-skills@hermes-model-switch
 ---
 
@@ -29,11 +29,10 @@ metadata:
 用户只说"切换模型"而未指定哪个模型：
 
 - ❌ "切换模型" → 三步流程
-- ❌ "切换其它模型" → 三步流程
 - ❌ "换个模型" → 三步流程
-- ❌ "切换其他模型" → 三步流程
+- ❌ "切一下" → 三步流程
 
-**没有关键词 = 不走快捷切换 = 必须走三步交互流程。**
+没提具体模型 = 走三步。
 
 ---
 
@@ -118,8 +117,17 @@ python3 scripts/hermes-switch-helper.py cache write <provider> <model>
 > 重要：`cache write` 必须在发 `/model` 命令前执行，确保无论用户是否实际执行切换，provider+model 组合都被记录到缓存中。
 
 ### 沟通规范
-
+### 沟通规范
 - **回复简洁**：只发编号 + 名称，不要表格 / 备注 / 未配 key 列表
+- **严禁合并成一行**：每个 provider / model 单独一行，保留脚本原始换行。以下是错误示范 vs 正确示范：
+  - ❌ 错误：`1. custom:gemma-vision 2. custom:53hk-claude 3. deepseek 4. nvidia`
+  - ✅ 正确：
+    ```
+    1. custom:gemma-vision
+    2. custom:53hk-claude
+    3. deepseek
+    4. nvidia
+    ```
 - **第 3 步命令**：单独一条消息，纯文本无格式（不包裹反引号/代码块）
 - **不要自作主张**：每步等用户回复，不跳步
 
@@ -128,6 +136,12 @@ python3 scripts/hermes-switch-helper.py cache write <provider> <model>
 - "切换模型" = **会话中临时切换**，不写 `config.yaml`（不带 `--global`）
 - 用 Hermes 自带的 `/model` slash 命令，不是改 `config.yaml`
 - Agent **不替用户发 `/model`** — slash command 是 user-side 触发的，只能用户发
+
+---
+
+## 关联参考
+
+- `references/provider-setup-nvidia.md` — NVIDIA provider 完整配置（多 API Key 凭证池 + least_used 轮询策略）
 
 ---
 
