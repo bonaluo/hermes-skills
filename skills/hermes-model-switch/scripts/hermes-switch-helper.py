@@ -34,6 +34,22 @@ from pathlib import Path
 HERMES_HOME = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
 
 
+def _read_credential_pool() -> dict[str, list[dict]]:
+    """Read ~/.hermes/auth.json credential_pool → {provider: [entries]}.
+    Returns empty dict if auth.json doesn't exist or is unreadable."""
+    auth_path = HERMES_HOME / "auth.json"
+    if not auth_path.exists():
+        return {}
+    try:
+        data = json.loads(auth_path.read_text(encoding="utf-8"))
+        pool = data.get("credential_pool") or {}
+        if not isinstance(pool, dict):
+            return {}
+        return {k: v for k, v in pool.items() if isinstance(v, list) and v}
+    except Exception:
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Config / .env 读取
 # ---------------------------------------------------------------------------
@@ -96,6 +112,10 @@ PROVIDERS: dict[str, dict] = {
         "base_url": "https://openrouter.ai/api/v1",
         "key_envs": ["OPENROUTER_API_KEY"],
     },
+    "deepseek": {
+        "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        "key_envs": ["DEEPSEEK_API_KEY"],
+    },
     "kimi-coding": {
         "base_url": "https://api.moonshot.cn/v1",
         "key_envs": ["KIMI_API_KEY", "MOONSHOT_API_KEY"],
@@ -121,6 +141,7 @@ PROVIDERS: dict[str, dict] = {
 def cmd_providers() -> int:
     cfg = _read_yaml(HERMES_HOME / "config.yaml")
     env = _read_env(HERMES_HOME / ".env")
+    cred_pool = _read_credential_pool()  # auth.json credential_pool
 
     model_block = cfg.get("model") or {}
     main_provider = (model_block.get("provider") or "").strip()
@@ -132,29 +153,59 @@ def cmd_providers() -> int:
     rows: list[tuple[str, str, bool]] = []  # (provider, role, has_key)
 
     def _check_key(prov: str) -> bool:
+        # 1) credential_pool (auth.json — hermes login / key add 存这里)
+        if prov in cred_pool or f"custom:{prov}" in cred_pool:
+            return True
+        # 2) PROVIDERS 注册表 key_envs
         meta = PROVIDERS.get(prov, {})
         envs = meta.get("key_envs") or []
         if any(env.get(e) for e in envs):
             return True
-        # 兜底:<PROV>_API_KEY 形式(把 - 变 _ ,大写)
+        # 3) 兜底:<PROV>_API_KEY 形式
         generic = f"{prov.upper().replace('-', '_')}_API_KEY"
-        return bool(env.get(generic))
+        if env.get(generic):
+            return True
+        return False
 
-    # 1) main
+    # 1) main — 直接配在 model.api_key 字段的 key 也算 has_key(不依赖 env)
+    #    若 main 的 base_url 与某个 custom_provider 相同(同一 endpoint),
+    #    跳过 bare "custom" 行,由命名行 custom:<name> 代替。
     if main_provider and main_provider not in seen:
-        rows.append((main_provider, "main", _check_key(main_provider)))
+        has_key = bool(model_block.get("api_key")) or _check_key(main_provider)
+        if has_key and main_provider == "custom":
+            main_url = (model_block.get("base_url") or "").rstrip("/")
+            if main_url and any(
+                (cp.get("base_url") or "").rstrip("/") == main_url
+                for cp in custom
+            ):
+                has_key = False  # 交给命名 custom_provider 显示
+        rows.append((main_provider, "main", has_key))
         seen.add(main_provider)
 
-    # 2) custom_providers(每个独立一行,因为 base_url 可能不同)
-    for i, cp in enumerate(custom):
-        prov = (cp.get("provider") or "custom").strip()
+    # 2) custom_providers — 用 `name` 字段作唯一标识,显示为 custom:<name>
+    #    (匹配 Hermes CLI --provider custom:<name> 的格式)
+    #    本地端点(无 api_key)也算有效 — 只要配了 base_url 就显示。
+    for cp in custom:
+        name = (cp.get("name") or "").strip()
+        if not name:
+            continue
+        prov = f"custom:{name}"
         if prov in seen:
             continue
-        has_key = bool(cp.get("api_key"))
+        has_base_url = bool((cp.get("base_url") or "").strip())
+        has_key = bool(cp.get("api_key")) or has_base_url
         rows.append((prov, "custom", has_key))
         seen.add(prov)
 
-    # 3) fallback_providers
+    # 3) credential_pool 中的 provider (auth.json — hermes login 产生)
+    #    排除 custom:* 和已在前面列过的。
+    for prov in sorted(cred_pool):
+        if prov in seen or prov.startswith("custom:"):
+            continue
+        rows.append((prov, "pool", True))
+        seen.add(prov)
+
+    # 4) fallback_providers
     for fb in fallback:
         prov = (fb.get("provider") or "").strip()
         if not prov or prov in seen:
@@ -176,28 +227,47 @@ def cmd_providers() -> int:
         if not has_key or prov in printed:
             continue
         n += 1
-        # 简短注释(main 时附 default model)
+        # 简短注释(main 时附 default model;custom 的 name 已在 prov 里)
         suffix = ""
         if role == "main" and main_default:
             suffix = f"({main_default})"
-        elif role == "custom":
-            cp0 = custom[0] if custom else {}
-            if cp0.get("name"):
-                suffix = f"({cp0['name']})"
         print(f"{n}. {prov}{suffix}")
         printed.add(prov)
 
-    # 兜底:.env 配了 key、但 config.yaml 任何块都没引用的 provider(典型:
-    # lm-studio 只在 .env 留了 key 备选、模型块仍用 nvidia)。也算"已配 key 可选"。
+    # 兜底: 双层扫描 — (1) PROVIDERS 注册表里已知的 provider,
+    #   (2) 所有 *_API_KEY 环境变量(通用发现,不依赖手工维护的列表)。
+    #   排除已知的非 LLM 工具 key(EXA/FIRECRAWL/PARALLEL)。
+
+    # 第 1 层: PROVIDERS 注册表(含 key_envs 别名,如 LM_API_KEY→lm-studio)
     for prov, meta in PROVIDERS.items():
         if prov in printed:
             continue
         envs = meta.get("key_envs") or []
         if not any(env.get(e) for e in envs):
-            # 兜底:<PROV>_API_KEY 形式
             generic = f"{prov.upper().replace('-', '_')}_API_KEY"
             if not env.get(generic):
                 continue
+        n += 1
+        print(f"{n}. {prov}")
+        printed.add(prov)
+
+    # 第 2 层: 通用扫描 — 所有 *_API_KEY,不在 PROVIDERS 注册表的也算
+    NON_PROVIDER_KEYS = {"EXA", "FIRECRAWL", "PARALLEL"}
+    import re as _re
+    _api_key_re = _re.compile(r'^(.+)_API_KEY$')
+    for k in sorted(env):
+        m = _api_key_re.match(k)
+        if not m:
+            continue
+        prov_upper = m.group(1)
+        if prov_upper in NON_PROVIDER_KEYS:
+            continue
+        prov = prov_upper.lower().replace('_', '-')
+        if prov in printed:
+            continue
+        # 跳过已在 PROVIDERS 注册表且 key_envs 覆盖的(第 1 层已处理)
+        if prov in PROVIDERS:
+            continue
         n += 1
         print(f"{n}. {prov}")
         printed.add(prov)
@@ -264,6 +334,23 @@ def cmd_models(provider: str) -> int:
                 break
     elif provider == "custom":
         base_url, api_key = _resolve_custom(cfg)
+    elif provider.startswith("custom:"):
+        # custom:<name> — 在 custom_providers 列表里按 name 查
+        target_name = provider.split(":", 1)[1].strip()
+        for cp in (cfg.get("custom_providers") or []):
+            if (cp.get("name") or "").strip() == target_name:
+                base_url = (cp.get("base_url") or "").rstrip("/") or None
+                api_key = cp.get("api_key") or None
+                break
+
+    # 通用兜底: 不在 PROVIDERS 注册表也不是 custom*,查 {PROV}_BASE_URL env
+    if not base_url:
+        prov_upper = provider.upper().replace("-", "_")
+        env_base = (env.get(f"{prov_upper}_BASE_URL") or "").rstrip("/")
+        env_key = env.get(f"{prov_upper}_API_KEY")
+        if env_base:
+            base_url = env_base or None
+            api_key = api_key or env_key
 
     if not base_url:
         print(f"  (no base_url for provider '{provider}'; using cache)", file=sys.stderr)

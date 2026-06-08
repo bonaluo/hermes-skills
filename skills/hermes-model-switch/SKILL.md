@@ -117,17 +117,7 @@ python3 scripts/hermes-switch-helper.py cache write <provider> <model>
 > 重要：`cache write` 必须在发 `/model` 命令前执行，确保无论用户是否实际执行切换，provider+model 组合都被记录到缓存中。
 
 ### 沟通规范
-### 沟通规范
-- **回复简洁**：只发编号 + 名称，不要表格 / 备注 / 未配 key 列表
-- **严禁合并成一行**：每个 provider / model 单独一行，保留脚本原始换行。以下是错误示范 vs 正确示范：
-  - ❌ 错误：`1. custom:gemma-vision 2. custom:53hk-claude 3. deepseek 4. nvidia`
-  - ✅ 正确：
-    ```
-    1. custom:gemma-vision
-    2. custom:53hk-claude
-    3. deepseek
-    4. nvidia
-    ```
+- **严禁合并成一行**：每个 provider / model 单独一行，保留脚本原始换行。示例：`1. a\n2. b`，禁止 `1. a 2. b`
 - **第 3 步命令**：单独一条消息，纯文本无格式（不包裹反引号/代码块）
 - **不要自作主张**：每步等用户回复，不跳步
 
